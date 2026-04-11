@@ -1,10 +1,15 @@
 require('dotenv').config();
 
-const admin = require('firebase-admin');
+const admin = require("firebase-admin");
+
 const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+
+// ✅ Prevent duplicate initialization
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
 const express = require('express');
 const app = express();
 const axios = require('axios');
