@@ -1,20 +1,24 @@
+# ---------------------------
+# ANDROID / IDE
+# ---------------------------
 *.iml
 .gradle
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+/.idea/
 .DS_Store
 /build
 /captures
 .externalNativeBuild
 .cxx
-local.properties
 
+# ---------------------------
+# BACKEND (Node.js inside project)
+# ---------------------------
+calorimeter-backend/node_modules/
 calorimeter-backend/.env
 calorimeter-backend/config/serviceAccountKey.json
 
-calorimeter-backend/node_modules/
+# ---------------------------
+# OPTIONAL (extra safety)
+# ---------------------------
+*.log
