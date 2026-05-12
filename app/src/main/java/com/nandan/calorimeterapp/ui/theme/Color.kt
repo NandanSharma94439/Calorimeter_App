@@ -1,4 +1,4 @@
-package com.example.calorimeterapp.ui.theme
+package com.nandan.calorimeterapp.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

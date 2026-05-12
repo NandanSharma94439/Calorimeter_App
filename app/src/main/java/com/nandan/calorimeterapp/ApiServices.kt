@@ -1,4 +1,4 @@
-package com.example.calorimeterapp
+package com.nandan.calorimeterapp
 
 import retrofit2.Call
 import retrofit2.http.*

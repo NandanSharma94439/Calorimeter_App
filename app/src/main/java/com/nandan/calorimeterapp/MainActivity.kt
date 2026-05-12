@@ -1,7 +1,8 @@
 @file:OptIn(ExperimentalMaterial3Api::class, ExperimentalGetImage::class)
 
-package com.example.calorimeterapp
-import androidx.camera.core.Preview
+package com.nandan.calorimeterapp
+
+import com.google.android.gms.ads.MobileAds
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -15,12 +16,10 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -56,47 +55,51 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
-import com.example.calorimeterapp.ui.theme.CalorimeterAppTheme
+import com.nandan.calorimeterapp.ui.theme.CalorimeterAppTheme
 import com.google.firebase.auth.FirebaseAuth
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
-import okhttp3.OkHttpClient
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 import java.util.Locale
 import java.util.concurrent.Executors
-
-private const val API_KEY = "my_super_secret_key"
-private const val BASE_URL = "https://earthling-robust-routing.ngrok-free.dev/"
-
-// GLOBAL RETROFIT SETUP WITH INTERCEPTOR
-private val okHttpClient = OkHttpClient.Builder()
-    .addInterceptor { chain ->
-        val request = chain.request().newBuilder()
-            .addHeader("x-api-key", API_KEY)
-            .build()
-        chain.proceed(request)
-    }
-    .build()
-
-private val retrofit = Retrofit.Builder()
-    .baseUrl(BASE_URL)
-    .client(okHttpClient)
-    .addConverterFactory(GsonConverterFactory.create())
-    .build()
-
-private val apiService = retrofit.create(ApiService::class.java)
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
+import com.google.android.gms.ads.LoadAdError
+import android.app.Activity
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import android.util.Log
 
 class MainActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
+    private var mInterstitialAd by mutableStateOf<InterstitialAd?>(null)
+    fun loadInterstitial() {
+        InterstitialAd.load(
+            this,
+            "ca-app-pub-2842829612476029/1293112009",
+            AdRequest.Builder().build(),
+            object : InterstitialAdLoadCallback() {
+                override fun onAdLoaded(ad: InterstitialAd) {
+                    mInterstitialAd = ad
+                    Log.d("ADS", "Interstitial Loaded")
+                }
 
+                override fun onAdFailedToLoad(adError: LoadAdError) {
+                    mInterstitialAd = null
+                    Log.d("ADS", "Failed: ${adError.message}")
+                }
+            }
+        )
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        MobileAds.initialize(this)
+        loadInterstitial()
         enableEdgeToEdge()
         auth = FirebaseAuth.getInstance()
 
@@ -136,7 +139,8 @@ class MainActivity : ComponentActivity() {
                             onLogout = {
                                 auth.signOut()
                                 isLoggedIn = false
-                            }
+                            },
+                            mInterstitialAd = mInterstitialAd
                         )
                     }
                 }
@@ -352,8 +356,10 @@ fun MainContainer(
     currentWeight: String, 
     currentGoal: String,
     onUpdateSettings: (String, String) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    mInterstitialAd: InterstitialAd?
 ) {
+    val context = LocalContext.current
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var refreshTrigger by remember { mutableIntStateOf(0) }
@@ -366,7 +372,12 @@ fun MainContainer(
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }, containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White, shape = CircleShape) {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = Color.White,
+                shape = CircleShape
+            ) {
                 Icon(Icons.Default.Add, "Add Food")
             }
         },
@@ -374,19 +385,52 @@ fun MainContainer(
             CenterAlignedTopAppBar(
                 title = { Text("Calorimeter", fontWeight = FontWeight.Bold) },
                 actions = {
-                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
-                    IconButton(onClick = onLogout) { Icon(Icons.AutoMirrored.Filled.Logout, "Logout") }
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(Icons.Default.Settings, "Settings")
+                    }
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, "Logout")
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            AndroidView(
+                factory = { context ->
+                    val adView = AdView(context)
+                    adView.setAdSize(AdSize.BANNER)
+                    adView.adUnitId = "ca-app-pub-2842829612476029/4573881460"
+                    adView.loadAd(AdRequest.Builder().build())
+                    adView
                 }
             )
         }
+
     ) { padding ->
         FoodListScreen(uid, padding, refreshTrigger, calorieTarget) { refreshTrigger++ }
 
         if (showAddDialog) {
-            AddFoodDialog(uid = uid, onDismiss = { showAddDialog = false }, onSuccess = {
-                showAddDialog = false
-                refreshTrigger++
-            })
+            AddFoodDialog(
+                uid = uid,
+                onDismiss = { showAddDialog = false },
+                onSuccess = {
+                    showAddDialog = false
+                    refreshTrigger++
+
+                    if (mInterstitialAd != null) {
+                        mInterstitialAd?.show(context as Activity)
+
+                        (context as Activity).let {
+                            if (it is MainActivity) {
+                                it.loadInterstitial()
+                            }
+                        }
+
+                    } else {
+                        Log.d("ADS", "Ad not ready")
+                    }
+                }
+            )
         }
 
         if (showSettings) {
@@ -458,7 +502,7 @@ fun FoodListScreen(uid: String, padding: PaddingValues, refreshTrigger: Int, tar
 
     LaunchedEffect(refreshTrigger) {
         isLoading = true
-        apiService.getFoods(uid).enqueue(object : Callback<List<FoodResponse>> {
+        ApiClient.apiService.getFoods(uid).enqueue(object : Callback<List<FoodResponse>> {
             override fun onResponse(call: Call<List<FoodResponse>>, response: Response<List<FoodResponse>>) {
                 if (response.isSuccessful) foodList = response.body() ?: emptyList()
                 isLoading = false
@@ -488,7 +532,7 @@ fun FoodListScreen(uid: String, padding: PaddingValues, refreshTrigger: Int, tar
         } else {
             items(foodList) { item ->
                 FoodCardWithDelete(item) {
-                    apiService.deleteFood(item.id).enqueue(object : Callback<SimpleResponse> {
+                    ApiClient.apiService.deleteFood(item.id).enqueue(object : Callback<SimpleResponse> {
                         override fun onResponse(call: Call<SimpleResponse>, response: Response<SimpleResponse>) { if (response.isSuccessful) onUpdate() }
                         override fun onFailure(call: Call<SimpleResponse>, t: Throwable) {}
                     })
@@ -576,8 +620,13 @@ fun FoodCardWithDelete(item: FoodResponse, onDelete: () -> Unit) {
     }
 }
 
+@androidx.annotation.OptIn(ExperimentalGetImage::class)
 @Composable
-fun AddFoodDialog(uid: String, onDismiss: () -> Unit, onSuccess: () -> Unit) {
+fun AddFoodDialog(
+    uid: String,
+    onDismiss: () -> Unit,
+    onSuccess: () -> Unit
+) {
     val context = LocalContext.current
     var foodName by remember { mutableStateOf("") }
     var caloriesInput by remember { mutableStateOf("0") }
@@ -612,7 +661,7 @@ fun AddFoodDialog(uid: String, onDismiss: () -> Unit, onSuccess: () -> Unit) {
         if (query.isBlank()) return
         isSearching = true
         isLoaded = false
-        apiService.searchFood(query).enqueue(object : Callback<SearchResponse> {
+        ApiClient.apiService.searchFood(query).enqueue(object : Callback<SearchResponse> {
             override fun onResponse(call: Call<SearchResponse>, response: Response<SearchResponse>) {
                 isSearching = false
                 if (response.isSuccessful) {
@@ -631,27 +680,30 @@ fun AddFoodDialog(uid: String, onDismiss: () -> Unit, onSuccess: () -> Unit) {
     }
 
     if (showScanner) {
-        BarcodeScannerDialog(onDismiss = { showScanner = false }, onCodeScanned = { code ->
-            showScanner = false
-            isSearching = true
-            apiService.getBarcode(code).enqueue(object : Callback<BarcodeResponse> {
-                override fun onResponse(call: Call<BarcodeResponse>, response: Response<BarcodeResponse>) {
-                    isSearching = false
-                    if (response.isSuccessful) {
-                        response.body()?.let { d ->
-                            foodName = d.name
-                            baseCals = d.calories
-                            baseP = d.protein
-                            baseC = d.carbs
-                            baseF = d.fat
-                            imageUrl = d.imageUrl
-                            isLoaded = true
+        BarcodeScannerDialog(
+            onDismiss = { showScanner = false },
+            onCodeScanned = { code ->
+                showScanner = false
+                isSearching = true
+                ApiClient.apiService.getBarcode(code).enqueue(object : Callback<BarcodeResponse> {
+                    override fun onResponse(call: Call<BarcodeResponse>, response: Response<BarcodeResponse>) {
+                        isSearching = false
+                        if (response.isSuccessful) {
+                            response.body()?.let { d ->
+                                foodName = d.name
+                                baseCals = d.calories
+                                baseP = d.protein
+                                baseC = d.carbs
+                                baseF = d.fat
+                                imageUrl = d.imageUrl
+                                isLoaded = true
+                            }
                         }
                     }
-                }
-                override fun onFailure(call: Call<BarcodeResponse>, t: Throwable) { isSearching = false }
-            })
-        })
+                    override fun onFailure(call: Call<BarcodeResponse>, t: Throwable) { isSearching = false }
+                })
+            }
+        )
     }
 
     BasicAlertDialog(onDismissRequest = onDismiss, modifier = Modifier.fillMaxWidth()) {
@@ -714,7 +766,7 @@ fun AddFoodDialog(uid: String, onDismiss: () -> Unit, onSuccess: () -> Unit) {
                             quantity = q, 
                             unit = unit
                         )
-                        apiService.addFood(req).enqueue(object : Callback<SimpleResponse> {
+                        ApiClient.apiService.addFood(req).enqueue(object : Callback<SimpleResponse> {
                             override fun onResponse(call: Call<SimpleResponse>, response: Response<SimpleResponse>) {
                                 if (response.isSuccessful) {
                                     Toast.makeText(context, "Added!", Toast.LENGTH_SHORT).show()
@@ -743,7 +795,6 @@ fun BarcodeScannerDialog(
     val context = LocalContext.current
     val executor = remember { Executors.newSingleThreadExecutor() }
 
-    // ✅ Better scanner config
     val scanner = remember {
         BarcodeScanning.getClient(
             BarcodeScannerOptions.Builder()
@@ -773,7 +824,6 @@ fun BarcodeScannerDialog(
         if (!hasPerm) launcher.launch(Manifest.permission.CAMERA)
     }
 
-    // ✅ Prevent multiple scans
     var scanned by remember { mutableStateOf(false) }
 
     Dialog(
@@ -796,7 +846,7 @@ fun BarcodeScannerDialog(
                         cameraProviderFuture.addListener({
                             val cameraProvider = cameraProviderFuture.get()
 
-                            val preview = Preview.Builder().build().also {
+                            val preview = androidx.camera.core.Preview.Builder().build().also {
                                 it.setSurfaceProvider(previewView.surfaceProvider)
                             }
 
@@ -855,7 +905,6 @@ fun BarcodeScannerDialog(
                 )
             }
 
-            // Close button
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier

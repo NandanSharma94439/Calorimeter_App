@@ -23,6 +23,49 @@ app.use(cors());
 app.use(express.json());
 
 const COLLECTION = 'foods';
+const pieceWeights = {
+  banana: 118,
+  egg: 50,
+  apple: 182,
+  roti: 40,
+  bread: 25
+};
+
+function calculateNutrition(per100g, grams) {
+  return Number(((per100g * grams) / 100).toFixed(1));
+}
+
+function extractGrams(quantityText) {
+  if (!quantityText) return 100;
+
+  quantityText = quantityText.toLowerCase();
+
+  // Handle "2 x 25g"
+  const multiPack = quantityText.match(/(\d+)\s*x\s*(\d+)\s*g/);
+  if (multiPack) {
+    return Number(multiPack[1]) * Number(multiPack[2]);
+  }
+
+  // Handle "500g"
+  const grams = quantityText.match(/(\d+)\s*g/);
+  if (grams) {
+    return Number(grams[1]);
+  }
+
+  // Handle "1kg"
+  const kg = quantityText.match(/(\d+(\.\d+)?)\s*kg/);
+  if (kg) {
+    return Number(kg[1]) * 1000;
+  }
+
+  // Handle "500ml"
+  const ml = quantityText.match(/(\d+)\s*ml/);
+  if (ml) {
+    return Number(ml[1]);
+  }
+
+  return 100;
+}
 
 // 🔐 API KEY MIDDLEWARE
 app.use((req, res, next) => {
@@ -105,7 +148,11 @@ app.delete('/delete-food/:id', async (req, res) => {
 // 🔍 SEARCH FOOD
 app.get('/search-food', async (req, res) => {
   try {
-    const { name } = req.query;
+    const {
+      name,
+      quantity = 1,
+      unit = "serving"
+    } = req.query;
 
     const usdaRes = await axios.get(
       `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(name)}&api_key=${process.env.USDA_API_KEY}`
@@ -157,20 +204,61 @@ app.get('/search-food', async (req, res) => {
 // 📷 BARCODE
 app.get('/barcode/:code', async (req, res) => {
   try {
+
     const r = await axios.get(
       `https://world.openfoodfacts.org/api/v0/product/${req.params.code}.json`
     );
 
-    if (r.data.status === 0) return res.status(404).send("Not found");
+    if (r.data.status === 0) {
+      return res.status(404).send("Not found");
+    }
 
     const p = r.data.product;
 
+    const calories100 =
+      Number(p.nutriments['energy-kcal_100g']) || 0;
+
+    const protein100 =
+      Number(p.nutriments.proteins_100g) || 0;
+
+    const carbs100 =
+      Number(p.nutriments.carbohydrates_100g) || 0;
+
+    const fat100 =
+      Number(p.nutriments.fat_100g) || 0;
+
+    const quantityText =
+      p.quantity || p.product_quantity || "100g";
+
+    const packetWeight =
+      extractGrams(quantityText);
+
+    const totalCalories =
+      calculateNutrition(calories100, packetWeight);
+
+    const totalProtein =
+      calculateNutrition(protein100, packetWeight);
+
+    const totalCarbs =
+      calculateNutrition(carbs100, packetWeight);
+
+    const totalFat =
+      calculateNutrition(fat100, packetWeight);
+
     res.send({
       name: p.product_name || "Unknown",
-      calories: p.nutriments['energy-kcal_100g'] || 0,
-      protein: p.nutriments.proteins_100g || 0,
-      carbs: p.nutriments.carbohydrates_100g || 0,
-      fat: p.nutriments.fat_100g || 0,
+
+      calories: totalCalories,
+      protein: totalProtein,
+      carbs: totalCarbs,
+      fat: totalFat,
+
+      caloriesPer100g: calories100,
+
+      packetWeight,
+
+      quantityLabel: quantityText,
+
       imageUrl: p.image_url || ""
     });
 
