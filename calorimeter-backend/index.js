@@ -173,8 +173,14 @@ app.get('/search-food', async (req, res) => {
     });
 
     let grams = 100;
-    const cleanName = name.toLowerCase().split(" ")[0];
+let cleanName =
+  name.toLowerCase().split(" ")[0];
 
+// singular normalization
+if (cleanName.endsWith("s")) {
+  cleanName =
+    cleanName.slice(0, -1);
+}
     if (unit === "g") grams = Number(quantity);
     else if (unit === "kg") grams = Number(quantity) * 1000;
     else if (unit === "pieces") {
