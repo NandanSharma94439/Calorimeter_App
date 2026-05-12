@@ -245,21 +245,58 @@ app.get('/barcode/:code', async (req, res) => {
     const totalFat =
       calculateNutrition(fat100, packetWeight);
 
+    let grams = 100;
+
+    const cleanName =
+      name.toLowerCase().split(" ")[0];
+
+    // grams mode
+    if (unit === "g") {
+
+      grams = Number(quantity);
+
+    }
+
+    // kg mode
+    else if (unit === "kg") {
+
+      grams = Number(quantity) * 1000;
+
+    }
+
+    // pieces mode
+    else if (unit === "pieces") {
+
+      const pieceWeight =
+        pieceWeights[cleanName] || 100;
+
+      grams =
+        Number(quantity) * pieceWeight;
+
+    }
+
+    // serving mode
+    else {
+
+      grams = Number(quantity) * 100;
+    }
+
     res.send({
-      name: p.product_name || "Unknown",
+      name: food.description,
 
-      calories: totalCalories,
-      protein: totalProtein,
-      carbs: totalCarbs,
-      fat: totalFat,
+      calories:
+        calculateNutrition(nutrients.calories, grams),
 
-      caloriesPer100g: calories100,
+      protein:
+        calculateNutrition(nutrients.protein, grams),
 
-      packetWeight,
+      carbs:
+        calculateNutrition(nutrients.carbs, grams),
 
-      quantityLabel: quantityText,
+      fat:
+        calculateNutrition(nutrients.fat, grams),
 
-      imageUrl: p.image_url || ""
+      imageUrl
     });
 
   } catch (err) {
