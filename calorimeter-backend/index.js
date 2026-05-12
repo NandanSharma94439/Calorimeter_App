@@ -71,9 +71,6 @@ function extractGrams(quantityText) {
 app.use((req, res, next) => {
   const key = req.headers['x-api-key'];
 
-  console.log("Incoming:", key);
-  console.log("Expected:", process.env.SECRET_API_KEY);
-
   if (key !== process.env.SECRET_API_KEY) {
     return res.status(403).send("Unauthorized");
   }
@@ -175,24 +172,32 @@ app.get('/search-food', async (req, res) => {
       if (nid === 1004 || nname.includes("fat")) nutrients.fat = n.value;
     });
 
-    let imageUrl = "";
+    let grams = 100;
+    const cleanName = name.toLowerCase().split(" ")[0];
 
+    if (unit === "g") grams = Number(quantity);
+    else if (unit === "kg") grams = Number(quantity) * 1000;
+    else if (unit === "pieces") {
+      const pieceWeight = pieceWeights[cleanName] || 100;
+      grams = Number(quantity) * pieceWeight;
+    }
+    else grams = Number(quantity) * 100;
+
+    let imageUrl = "";
     try {
       const cleanQ = name.split(',')[0].split(' ')[0];
-
       const pixRes = await axios.get(
         `https://pixabay.com/api/?key=${process.env.PIXABAY_API_KEY}&q=${encodeURIComponent(cleanQ + " food")}&image_type=photo&category=food&safesearch=true`
       );
-
-      if (pixRes.data.hits.length > 0) {
-        imageUrl = pixRes.data.hits[0].webformatURL;
-      }
-
+      if (pixRes.data.hits.length > 0) imageUrl = pixRes.data.hits[0].webformatURL;
     } catch (e) {}
 
     res.send({
       name: food.description,
-      ...nutrients,
+      calories: calculateNutrition(nutrients.calories, grams),
+      protein: calculateNutrition(nutrients.protein, grams),
+      carbs: calculateNutrition(nutrients.carbs, grams),
+      fat: calculateNutrition(nutrients.fat, grams),
       imageUrl
     });
 
@@ -204,99 +209,35 @@ app.get('/search-food', async (req, res) => {
 // 📷 BARCODE
 app.get('/barcode/:code', async (req, res) => {
   try {
-
     const r = await axios.get(
       `https://world.openfoodfacts.org/api/v0/product/${req.params.code}.json`
     );
 
-    if (r.data.status === 0) {
-      return res.status(404).send("Not found");
-    }
+    if (r.data.status === 0) return res.status(404).send("Not found");
 
     const p = r.data.product;
-
-    const calories100 =
-      Number(p.nutriments['energy-kcal_100g']) || 0;
-
-    const protein100 =
-      Number(p.nutriments.proteins_100g) || 0;
-
-    const carbs100 =
-      Number(p.nutriments.carbohydrates_100g) || 0;
-
-    const fat100 =
-      Number(p.nutriments.fat_100g) || 0;
-
     const quantityText =
-      p.quantity || p.product_quantity || "100g";
+      p.quantity ||
+      p.product_quantity ||
+      "";
 
-    const packetWeight =
-      extractGrams(quantityText);
+    const grams = extractGrams(quantityText);
+    const name = p.product_name || "Unknown Item";
 
-    const totalCalories =
-      calculateNutrition(calories100, packetWeight);
-
-    const totalProtein =
-      calculateNutrition(protein100, packetWeight);
-
-    const totalCarbs =
-      calculateNutrition(carbs100, packetWeight);
-
-    const totalFat =
-      calculateNutrition(fat100, packetWeight);
-
-    let grams = 100;
-
-    const cleanName =
-      name.toLowerCase().split(" ")[0];
-
-    // grams mode
-    if (unit === "g") {
-
-      grams = Number(quantity);
-
-    }
-
-    // kg mode
-    else if (unit === "kg") {
-
-      grams = Number(quantity) * 1000;
-
-    }
-
-    // pieces mode
-    else if (unit === "pieces") {
-
-      const pieceWeight =
-        pieceWeights[cleanName] || 100;
-
-      grams =
-        Number(quantity) * pieceWeight;
-
-    }
-
-    // serving mode
-    else {
-
-      grams = Number(quantity) * 100;
-    }
+    const nutrients = {
+      calories: Number(p.nutriments['energy-kcal_100g']) || 0,
+      protein: Number(p.nutriments.proteins_100g) || 0,
+      carbs: Number(p.nutriments.carbohydrates_100g) || 0,
+      fat: Number(p.nutriments.fat_100g) || 0
+    };
 
     res.send({
-      name: food.description,
-
-      calories:
-        calculateNutrition(nutrients.calories, grams),
-
-      protein:
-        calculateNutrition(nutrients.protein, grams),
-
-      carbs:
-        calculateNutrition(nutrients.carbs, grams),
-
-      fat:
-        calculateNutrition(nutrients.fat, grams),
-
-      imageUrl
+      name: name,
+      calories: calculateNutrition(nutrients.calories, grams),
+      protein: calculateNutrition(nutrients.protein, grams),
+      carbs: calculateNutrition(nutrients.carbs, grams),
+      fat: calculateNutrition(nutrients.fat, grams),
+      imageUrl: p.image_url || ""
     });
 
   } catch (err) {
